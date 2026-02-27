@@ -44,4 +44,4 @@ class ManualAim(Command):
 
         # FIXME These coefficients are not going to be good
         self.subsystem.angle = self.subsystem.angle + 0.1 * x
-        self.subsystem.elevation = self.subsystem.elevation + 0.1 * y
+        self.subsystem.elevation = self.subsystem.target_elevation + 0.1 * y

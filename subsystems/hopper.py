@@ -1,18 +1,20 @@
 from commands2 import Subsystem
 
+from phoenix5 import WPI_TalonSRX
 
 class HopperSubsystem(Subsystem):
     def __init__(self):
         super().__init__()
 
         self.total_items = 0
-        # TODO
+        self.director = WPI_TalonSRX(15)
+        self.director_speed = 0.5
 
     def enable_director(self) -> None:
-        pass
+        self.director.set(self.director_speed)
 
     def disable_director(self) -> None:
-        pass
+        self.director.stopMotor()
 
     def toggle_director(self) -> None:
         if self.is_enabled():
@@ -21,10 +23,10 @@ class HopperSubsystem(Subsystem):
             self.enable_director()
 
     def reverse_director(self) -> None:
-        pass
+        self.director.set(-self.director_speed)
 
     def is_enabled(self) -> bool:
-        pass
+        return self.director.get() != 0
 
     def contains_items(self) -> bool:
         return self.total_items > 0

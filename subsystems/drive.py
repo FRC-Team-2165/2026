@@ -1,4 +1,5 @@
 import phoenix6.hardware.pigeon2
+import wpilib
 from commands2 import Subsystem
 from wpimath.geometry import Translation2d, Pose3d, Translation3d, Rotation3d, Rotation2d
 from wpimath.filter import SlewRateLimiter
@@ -96,6 +97,7 @@ class DriveSubsystem(Subsystem):
 
     def get_position(self) -> Pose3d:
         # CHECK Make sure the axes of the translation and rotation match up with AprilTag output
+        #   This will likely need to be affected by which alliance we're on
         translation = self.position.translation() + Translation3d(self.swerve.location())
         rot = Rotation3d(0, 0, self.gyro.getAngle())
         pose = Pose3d(translation, rot)

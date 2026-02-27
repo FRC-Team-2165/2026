@@ -1,6 +1,15 @@
 from commands2 import Subsystem
 from enum import Flag
 from dataclasses import dataclass
+from wpimath.geometry import Pose3d, Translation3d, Rotation3d
+import math
+
+from wpilib import AnalogEncoder
+from wpilib import Servo
+from wpimath.controller import PIDController
+from rev import SparkMax
+import rev
+from phoenix5 import WPI_TalonSRX
 
 class TargetingStatus(Flag):
     Set = 0,
@@ -26,6 +35,10 @@ class Range:
     def clamp(self, value: float) -> float:
         return max(self.min, min(value, self.max))
 
+NEO_MAX_RPM = 5676
+# ft/s - assuming a 2-inch diameter wheel
+NEO_MAX_SPEED = NEO_MAX_RPM * 2 * math.pi / 7200
+
 
 class ShooterSubsystem(Subsystem):
     _target_elevation: float
@@ -37,6 +50,15 @@ class ShooterSubsystem(Subsystem):
     requested_angle: float
     angle_tolerance: float
     angle_range: Range
+    angle_controller: PIDController
+
+    angle_motor: WPI_TalonSRX
+    angle_sensor: AnalogEncoder
+
+    elevation_servo: Servo
+
+    shooters: list[SparkMax]
+    shooter_encoders: list[rev.SparkAbsoluteEncoder]
 
     def __init__(self):
         super().__init__()
@@ -50,11 +72,37 @@ class ShooterSubsystem(Subsystem):
         self.requested_angle = 0.0
         self.angle_tolerance = 0.1
         self.angle_range = Range(0.0, 360.0)
-        # TODO add feedback controllers (probably PID, but we'll see)
-        #      This may include wheel-speed controllers, though that may be doable inside the physical controller
+
+        #TODO Figure out coefficients
+        self.angle_controller = PIDController(1/45, 0, 0)
+        self.angle_controller.setTolerance(1) # 1 degree
+
+        # TODO put 3d coordinates relative to center of robot
+        self.shooter_mouth = Translation3d()
 
         self.enabled = False
-        # TODO Add actual hardware nonsense
+
+        turntable_ratio = 96/12
+        full_angle_range = (360 / turntable_ratio) * 10
+        self.angle_slop = (10 - turntable_ratio) * full_angle_range / 2
+
+        self.angle_sensor = AnalogEncoder(0, full_angle_range, full_angle_range / 2)
+        self.angle_motor = WPI_TalonSRX(19)
+
+        # CHECK this may be more usable as a direct PWM output
+        # TODO BIG TODO This servo has extremely poor documentation, and everything will need to be checked
+        # It will likely have a practical range of ~90 degrees, but that means nothing to the controller
+        self.elevation_servo = Servo(0)
+        config = rev.SparkBaseConfig().encoder.velocityConversionFactor(2 * math.pi / 7200) #ft/s assuming 2in wheels
+        shooter_left = SparkMax(20, SparkMax.MotorType.kBrushless)
+        shooter_left.configure(config, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kNoPersistParameters)
+        shooter_right = SparkMax(21, SparkMax.MotorType.kBrushless)
+        shooter_right.configure(config, rev.ResetMode.kNoResetSafeParameters, rev.PersistMode.kNoPersistParameters)
+        self.shooters = [shooter_left, shooter_right]
+        self.shooter_encoders = [s.getAbsoluteEncoder() for s in self.shooters]
+
+        target_shooter_speed = 35 #ft/s
+        self.shooter_speed = target_shooter_speed / NEO_MAX_SPEED
 
     def enable_launcher(self) -> None:
         self.enabled = True
@@ -111,8 +159,12 @@ class ShooterSubsystem(Subsystem):
 
     @property
     def elevation(self) -> float:
-        #TODO return shooter elevation detected by encoder
-        return 0.0
+        # CHECK return shooter elevation detected by encoder
+        #     At present, this isn't possible, since it's a servo, and there isn't an encoder
+        #  This will always return the target elevation, not the actual, so the elevation_status
+        #  will always register as set
+        return self.elevation_servo.getAngle()
+
 
     @elevation.setter
     def elevation(self, target: float) -> None:
@@ -124,8 +176,8 @@ class ShooterSubsystem(Subsystem):
 
     @property
     def angle(self) -> float:
-        # TODO return turret angle detected by encoder
-        return 0.0
+        # The encoder has a larger range than 360 in practice, so this corrects for that
+        return self.angle_sensor.get() - self.angle_slop
 
     @angle.setter
     def angle(self, target: float) -> None:
@@ -135,12 +187,18 @@ class ShooterSubsystem(Subsystem):
     def target_angle(self) -> float:
         return self._target_angle
 
-    def periodic(self) -> None:
-        # This is not necessarily the best way to do this, but it's not incorrect.
-        # It's functionally equivalent to simply running and stopping the motors in the respective enable and disable methods.
-        if self.enabled:
-            # enable or disable the shooter here
-            pass
+    @property
+    def position(self) -> Pose3d:
+        return Pose3d(self.shooter_mouth, Rotation3d.fromDegrees(0, 0, self.angle))
 
-        # TODO tune system to target elevation and turret angle
+    def periodic(self) -> None:
+        # enable or disable shooters
+        for shooter in self.shooters:
+            # These have internal controllers, so this should be sufficient
+            shooter.set(self.shooter_speed if self.enabled else 0)
+
+        speed = self.angle_controller.calculate(self.angle)
+        self.angle_motor.set(speed)
+
+        # TODO Set servo angle based on target_elevation
 

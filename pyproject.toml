@@ -28,3 +28,10 @@ requires = [
     "robotpy-rev",
     "photonlibpy>2026",
 ]
+
+# additionally requires
+#[
+#    "ailangpy"
+#    "interpreter-command"
+#]
+# But these make robotpy unhappy, so they need to be installed separately
