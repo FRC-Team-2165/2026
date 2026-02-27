@@ -14,8 +14,8 @@ from commands2.cmd import (
 from commands2.button import CommandXboxController, Trigger
 
 import commands.feeder_intake
-from components.omni import Tracker
-from components.omni.adapter import PhotonAdapter
+# from components.omni import Tracker
+# from components.omni.adapter import PhotonAdapter
 from wpimath.geometry import Pose3d
 from subsystems import *
 from subsystems.shooter import TargetingStatus
