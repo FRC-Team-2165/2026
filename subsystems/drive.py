@@ -3,35 +3,9 @@ import wpilib
 from commands2 import Subsystem
 from wpimath.geometry import Translation2d, Pose3d, Translation3d, Rotation3d, Rotation2d
 from wpimath.filter import SlewRateLimiter
-from copy import copy
 
 from components.swerve.drive import SwerveDrive, SwerveModuleConfig
 import navx
-
-BASIC_MODULE = SwerveModuleConfig(
-    drive_motor_id=100,
-    turn_motor_id=101,
-    turn_encoder_id=102,
-    relative_position=Translation2d(),
-    inverted=False,
-    # All the values after this point should be constant
-    gear_ratio=8.14,
-    max_drive_motor_speed=5676,
-    wheel_radius=0.0508,
-)
-
-def generate_config(drive_id: int, turn_motor_id: int, turn_encoder_id: int, loc: Translation2d, inverted: bool) -> SwerveModuleConfig:
-    return SwerveModuleConfig(
-        drive_motor_id=drive_id,
-        turn_motor_id=turn_motor_id,
-        turn_encoder_id=turn_encoder_id,
-        relative_position=loc,
-        inverted=inverted,
-        # constant values
-        gear_ratio=8.14,
-        max_drive_motor_speed=5676,
-        wheel_radius=0.0508,
-    )
 
 class DriveSubsystem(Subsystem):
 
@@ -41,13 +15,14 @@ class DriveSubsystem(Subsystem):
 
     def __init__(self):
         super().__init__()
-        # TODO Fix configuration parameters
-        front_left = generate_config(1,2,9, Translation2d(0, 0), False)
-        front_right = generate_config(3,4,10, Translation2d(0, 0), False)
-        rear_right = generate_config(5,6,11, Translation2d(0, 0), False)
-        rear_left = generate_config(7,8,12, Translation2d(0, 0), False)
-
+        long_offset = 0.32940625
+        short_offset = 0.24050625
+        front_left = SwerveModuleConfig(4, 3, 10, Translation2d(long_offset, short_offset), False, 8.14, max_drive_motor_speed=5676)
+        front_right = SwerveModuleConfig(6, 5, 11, Translation2d(long_offset, -short_offset), False, 8.14, max_drive_motor_speed=5676)
+        rear_left = SwerveModuleConfig(2, 1, 9, Translation2d(-long_offset, short_offset), False, 8.14, max_drive_motor_speed=5676)
+        rear_right = SwerveModuleConfig(8, 7, 12, Translation2d(-long_offset, -short_offset), False, 8.14, max_drive_motor_speed=5676)
         self.swerve = SwerveDrive(front_left, front_right, rear_left, rear_right, deadband=0.1)
+
         # self.drive.set_x_deadband(0.1)
         # self.drive.set_y_deadband(0.1)
         # self.drive.set_rotation_deadband(0.2)
@@ -87,7 +62,7 @@ class DriveSubsystem(Subsystem):
         self.swerve.stopMotor()
 
     def get_angle(self) -> float:
-        return self.gyro.getAngle() - self.yaw_offset
+        return (self.gyro.getAngle() - self.yaw_offset) % 360
 
     def set_angle_offset(self, angle: Rotation2d) -> None:
         self.yaw_offset = angle.degrees()

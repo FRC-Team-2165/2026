@@ -21,6 +21,7 @@ class RunIntake(Command):
         self.wait = wait
 
     def initialize(self):
+        print(self.action)
         self.start_enabled = self.subsystem.is_enabled()
         match self.action:
             case IntakeActivity.Enable:
@@ -38,10 +39,10 @@ class RunIntake(Command):
     def end(self, interrupted: bool):
         self.subsystem.disable()
 
-    def isFinished(self) -> bool:
-        if not self.wait:
-            return True
-        return self.subsystem.is_enabled()
+    # def isFinished(self) -> bool:
+    #     if not self.wait:
+    #         return True
+    #     return self.subsystem.is_enabled()
         # match self.action:
         #     case IntakeActivity.Enable | IntakeActivity.Reverse:
         #         return self.subsystem.is_enabled()

@@ -10,12 +10,17 @@ from commands2.cmd import (
     ParallelCommandGroup,
     WaitUntilCommand,
     ConditionalCommand,
-    StartEndCommand)
+    StartEndCommand,
+    RunCommand)
 from commands2.button import CommandXboxController, Trigger
+from wpilib import SmartDashboard as sd
+import phoenix6
+
+from wpimath import applyDeadband
 
 import commands.feeder_intake
-# from components.omni import Tracker
-# from components.omni.adapter import PhotonAdapter
+from components.omni import Tracker
+from components.omni.adapter import PhotonAdapter
 from wpimath.geometry import Pose3d
 from subsystems import *
 from subsystems.shooter import TargetingStatus
@@ -29,21 +34,84 @@ from typing import Optional
 
 class Robot(TimedRobot):
     auto_error: bool
-    auto_command: Command
+    auto_command: Optional[Command]
 
     controller: CommandXboxController
 
     drive: DriveSubsystem
+    intake: IntakeSubsystem
+    hopper: HopperSubsystem
+    feeder: FeederSubsystem
+    shooter: ShooterSubsystem
 
     def robotInit(self):
-        self.drive = DriveSubsystem()
-
         self.controller = CommandXboxController(0)
+        self.drive = DriveSubsystem()
+        self.intake = IntakeSubsystem()
+        self.hopper = HopperSubsystem()
+        self.feeder = FeederSubsystem()
+        self.shooter = ShooterSubsystem()
+
+
+        testing = Trigger(wpilib.DriverStation.isTest)
+        enabled = Trigger(wpilib.DriverStation.isEnabled)
+        intake_lowered = Trigger(self.intake.is_extended)
+        holding_items = Trigger(self.hopper.contains_items)
+        kicker_enabled = Trigger(self.feeder.kicker_enabled)
+
+
         controller_drive_command = ControllerDrive(self.drive, self.controller)
         self.drive.setDefaultCommand(controller_drive_command)
 
+        self.controller.x().onTrue(ShiftIntake(self.intake, wait=False))
+        ((intake_lowered | testing) & self.controller.leftTrigger() & ~self.controller.povLeft()).whileTrue(RunIntake(self.intake))
+        ((intake_lowered | testing) & self.controller.leftTrigger() & self.controller.povLeft()).whileTrue(RunIntake(self.intake, IntakeActivity.Reverse))
+
+        (self.controller.back() & self.controller.y()).onTrue(InstantCommand(self.feeder.toggle_kicker))
+        (self.controller.back() & self.controller.b()).onTrue(InstantCommand(self.shooter.toggle_launcher))
+
+        (self.controller.back() & self.controller.start()).onTrue(InstantCommand(controller_drive_command.toggle_field_relative))
+
+        # (self.controller.rightTrigger() & (holding_items | testing)).whileTrue(StartEndCommand(self.feeder.enable_intake, self.feeder.disable_intake))
+        (self.controller.rightTrigger() & ((holding_items & kicker_enabled) | testing)).whileTrue(SequentialCommandGroup(
+            ElevateShooter(self.shooter, 12, wait=False),
+            WaitCommand(0.25),
+            InstantCommand(self.feeder.enable_intake)
+        )).onFalse(SequentialCommandGroup(
+            ElevateShooter(self.shooter, 5, wait=False),
+            InstantCommand(self.feeder.disable_intake)
+        ))
+
+        # This is likely a temporary solution.
+        def update_shooter():
+            requested_angle = self.shooter.target_angle + applyDeadband(self.controller.getRightX(), 0.2) * 3
+            requested_angle = self.shooter.angle_range.clamp(requested_angle)
+            if requested_angle == self.shooter.angle_range.max:
+                requested_angle = requested_angle - 0.01
+            self.shooter.request_angle(requested_angle)
+            # self.shooter.request_angle(self.shooter.target_angle + applyDeadband(self.controller.getRightX(), 0.2) * 1)
+            # self.shooter.target_angle += applyDeadband(self.controller.getRightX(), 0.1) * 1
+            self.shooter.elevation += applyDeadband(self.controller.getRightY(), 0.2) * -0.25
+
+        (self.controller.leftBumper()).whileTrue(SequentialCommandGroup(
+            InstantCommand(controller_drive_command.disable),
+            RunCommand(update_shooter)
+        )).onFalse(InstantCommand(controller_drive_command.enable))
+
+
+        def on_start():
+            if testing():
+                self.feeder.disable_kicker()
+                self.shooter.disable_launcher()
+            else:
+                self.feeder.enable_kicker()
+                self.shooter.enable_launcher()
+
+        enabled.onTrue(InstantCommand(on_start))
+
         self.auto_error = False
         self.auto_command = None
+        phoenix6.SignalLogger.stop()
 
     def robotPeriodic(self):
         # if self.isEnabled():
@@ -51,6 +119,10 @@ class Robot(TimedRobot):
         # self.omniscience.update()
         # self.drive.set_position(self.omniscience.get_position())
         CommandScheduler.getInstance().run()
+        sd.putNumber("Intake Position (angle)", self.intake.angle())
+        sd.putBoolean("Kicker", self.feeder.kicker_enabled())
+        sd.putNumber("Kicker target", self.feeder.kicker_target)
+
 
     def autonomousInit(self):
         try:

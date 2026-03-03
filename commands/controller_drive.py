@@ -17,21 +17,31 @@ class ControllerDrive(Command):
         self.controller = controller
 
         self._field_relative = True
+        self.enabled = True
+        self.addRequirements(subsystem)
+
+    def enable(self):
+        self.enabled = True
+
+    def disable(self):
+        self.enabled = False
 
     def initialize(self):
         pass
 
     def execute(self):
+        if not self.enabled:
+            return
         if self.controller.start().getAsBoolean() and self.controller.back().getAsBoolean():
             self._field_relative = not self._field_relative
-        x = self.controller.getLeftX()
-        y = -self.controller.getLeftY()
+        x = self.controller.getLeftY()
+        y = -self.controller.getLeftX()
         rot = self.controller.getRightX()
 
         # Assumes that no alliance set should work like Blue Alliance.
-        if self._field_relative and DriverStation.getAlliance() == DriverStation.Alliance.kRed:
-            x = -x
-            y = -y
+        # if self._field_relative and DriverStation.getAlliance() == DriverStation.Alliance.kRed:
+        #     x = -x
+        #     y = -y
 
         x = applyDeadband(x, 0.1)
         y = applyDeadband(y, 0.1)

@@ -22,6 +22,7 @@ class ShiftIntake(Command):
         self.wait = wait
 
     def initialize(self):
+        print("shift intake")
         self.start_position = self.subsystem.position()
         match self.instruction:
             case IntakePosition.Extend:
@@ -29,7 +30,14 @@ class ShiftIntake(Command):
             case IntakePosition.Retract:
                 self.subsystem.retract()
             case IntakePosition.Toggle:
-                self.subsystem.toggle()
+                if self.start_position == IntakePositionState.Retracting or self.start_position == IntakePositionState.Retracted:
+                    self.subsystem.extend()
+                else:
+                    self.subsystem.retract()
+                # self.subsystem.toggle()
+
+    def end(self, interrupted: bool):
+        print("intake finished")
 
     def isFinished(self) -> bool:
         if not self.wait:

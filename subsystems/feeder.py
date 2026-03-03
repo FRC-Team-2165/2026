@@ -8,7 +8,7 @@ from wpilib import DigitalInput
 
 MINI_CIM_MAX_RPM = 6200
 # assuming 2-inch diameter wheels
-MINI_CIM_MAX_SPEED = MINI_CIM_MAX_RPM * 2 * math.pi / 7200
+MINI_CIM_MAX_SPEED = MINI_CIM_MAX_RPM * 2 * math.pi / 720
 
 class FeederSubsystem(Subsystem):
 
@@ -22,18 +22,19 @@ class FeederSubsystem(Subsystem):
         self.target_kicker_speed = 35 # ft/s
         self.kicker_target = self.target_kicker_speed / MINI_CIM_MAX_SPEED
 
-        self.intake_speed = 0.5
+        self.intake_speed = 0.35
 
         self.passthrough_callbacks = []
 
-        kicker_outer = WPI_TalonSRX(16)
-        kicker_inner = WPI_TalonSRX(17)
+        kicker_front = WPI_TalonSRX(16)
+        kicker_back = WPI_TalonSRX(17)
+        kicker_back.setInverted(True)
         # Inversion assumed to be set in the controller
-        self.kickers = [kicker_outer, kicker_inner]
+        self.kickers = [kicker_front, kicker_back]
 
         self.intake_motor = WPI_TalonSRX(18)
 
-        self.detector = DigitalInput(1)
+        # self.detector = DigitalInput(1)
 
         # No feedback controllers for this system (yet)
 
@@ -41,7 +42,7 @@ class FeederSubsystem(Subsystem):
         self.intake_motor.set(self.intake_speed)
 
     def disable_intake(self) -> None:
-        self.intake_motor.stopMotor()
+        self.intake_motor.set(0)
 
     def reverse_intake(self) -> None:
         self.intake_motor.set(-self.intake_speed)
@@ -55,7 +56,7 @@ class FeederSubsystem(Subsystem):
 
     def disable_kicker(self) -> None:
         for kicker in self.kickers:
-            kicker.stopMotor()
+            kicker.set(0)
 
     def toggle_kicker(self) -> None:
         if not self.kicker_enabled():
@@ -68,7 +69,8 @@ class FeederSubsystem(Subsystem):
 
     def sees_item(self) -> bool:
         # CHECK may need to invert
-        return self.detector.get()
+        # return self.detector.get()
+        return False
 
     def add_passthrough_callback(self, callback: Callable[[], None]):
         self.passthrough_callbacks.append(callback)

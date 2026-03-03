@@ -7,7 +7,7 @@ class ShiftDirection(Enum):
     Reverse = 1
 
 class FeederIntake(Command):
-    def __init__(self, subsystem: FeederSubsystem, direction: ShiftDirection, wait: bool = False):
+    def __init__(self, subsystem: FeederSubsystem, direction: ShiftDirection = ShiftDirection.Forward, wait: bool = False):
         super().__init__()
         self.subsystem = subsystem
         self.direction = direction
