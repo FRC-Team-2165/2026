@@ -122,6 +122,7 @@ class ShooterSubsystem(Subsystem):
 
         target_shooter_speed = 35 #ft/s
         self.shooter_speed = target_shooter_speed / NEO_MAX_SPEED
+        self.shooter_speed = 1
 
     def enable_launcher(self) -> None:
         self.enabled = True

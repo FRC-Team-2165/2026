@@ -32,10 +32,8 @@ class ControllerDrive(Command):
     def execute(self):
         if not self.enabled:
             return
-        if self.controller.start().getAsBoolean() and self.controller.back().getAsBoolean():
-            self._field_relative = not self._field_relative
-        x = self.controller.getLeftY()
-        y = -self.controller.getLeftX()
+        x = -self.controller.getLeftY()
+        y = self.controller.getLeftX()
         rot = self.controller.getRightX()
 
         # Assumes that no alliance set should work like Blue Alliance.
@@ -47,7 +45,7 @@ class ControllerDrive(Command):
         y = applyDeadband(y, 0.1)
         rot = applyDeadband(rot, 0.2)
 
-        self.subsystem.drive(x, y, rot, self._field_relative)
+        self.subsystem.drive(x, y, rot, field_relative=False, square_inputs=True)
 
     def end(self, interrupted: bool):
         pass

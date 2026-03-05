@@ -40,7 +40,7 @@ class DriveSubsystem(Subsystem):
 
         self.position = Pose3d()
 
-    def drive(self, x_speed: float, y_speed: float, rotation: float, field_relative: bool = True) -> None:
+    def drive(self, x_speed: float, y_speed: float, rotation: float, field_relative: bool = True, square_inputs: bool = False) -> None:
         x_speed = self.xLimiter.calculate(x_speed)
         y_speed = self.yLimiter.calculate(y_speed)
         rotation = self.rotationLimiter.calculate(rotation)
@@ -48,9 +48,9 @@ class DriveSubsystem(Subsystem):
         # print(f"x: {x_speed} y: {y_speed}")
 
         if field_relative:
-            self.swerve.drive(-x_speed, -y_speed, rotation, self.get_angle())
+            self.swerve.drive(-x_speed, -y_speed, rotation, self.get_angle(), square_inputs=square_inputs)
         else:
-            self.swerve.drive(-x_speed, -y_speed, rotation)
+            self.swerve.drive(-x_speed, -y_speed, rotation, square_inputs=square_inputs)
 
     def initialize(self) -> None:
         self.swerve.initialize()
@@ -62,7 +62,7 @@ class DriveSubsystem(Subsystem):
         self.swerve.stopMotor()
 
     def get_angle(self) -> float:
-        return (self.gyro.getAngle() - self.yaw_offset) % 360
+        return (self.gyro.getAngle() - self.yaw_offset)
 
     def set_angle_offset(self, angle: Rotation2d) -> None:
         self.yaw_offset = angle.degrees()

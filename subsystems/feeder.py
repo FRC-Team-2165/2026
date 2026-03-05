@@ -13,7 +13,7 @@ MINI_CIM_MAX_SPEED = MINI_CIM_MAX_RPM * 2 * math.pi / 720
 class FeederSubsystem(Subsystem):
 
     intake_motor: WPI_TalonSRX
-    kickers: list[WPI_TalonSRX]
+    # kickers: list[WPI_TalonSRX]
     detector: DigitalInput
 
     def __init__(self):
@@ -22,15 +22,15 @@ class FeederSubsystem(Subsystem):
         self.target_kicker_speed = 35 # ft/s
         self.kicker_target = self.target_kicker_speed / MINI_CIM_MAX_SPEED
 
-        self.intake_speed = 0.35
+        self.intake_speed = 0.5
 
         self.passthrough_callbacks = []
 
-        kicker_front = WPI_TalonSRX(16)
-        kicker_back = WPI_TalonSRX(17)
-        kicker_back.setInverted(True)
+        self.kicker_front = WPI_TalonSRX(16)
+        self.kicker_back = WPI_TalonSRX(17)
+        self.kicker_back.setInverted(True)
         # Inversion assumed to be set in the controller
-        self.kickers = [kicker_front, kicker_back]
+        # self.kickers = [kicker_front, kicker_back]
 
         self.intake_motor = WPI_TalonSRX(18)
 
@@ -51,12 +51,16 @@ class FeederSubsystem(Subsystem):
         return self.intake_motor.get() != 0
 
     def enable_kicker(self) -> None:
-        for kicker in self.kickers:
-            kicker.set(self.kicker_target)
+        self.kicker_front.set(self.kicker_target)
+        self.kicker_back.set(self.kicker_target)
+        # for kicker in self.kickers:
+        #     kicker.set(self.kicker_target)
 
     def disable_kicker(self) -> None:
-        for kicker in self.kickers:
-            kicker.set(0)
+        self.kicker_front.set(0)
+        self.kicker_back.set(0)
+        # for kicker in self.kickers:
+        #     kicker.set(0)
 
     def toggle_kicker(self) -> None:
         if not self.kicker_enabled():
@@ -65,7 +69,8 @@ class FeederSubsystem(Subsystem):
             self.disable_kicker()
 
     def kicker_enabled(self) -> bool:
-        return any(kicker.get() != 0 for kicker in self.kickers)
+        return self.kicker_front.get() != 0 or self.kicker_back.get() != 0
+        # return any(kicker.get() != 0 for kicker in self.kickers)
 
     def sees_item(self) -> bool:
         # CHECK may need to invert

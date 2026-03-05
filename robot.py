@@ -72,9 +72,21 @@ class Robot(TimedRobot):
 
         (self.controller.back() & self.controller.start()).onTrue(InstantCommand(controller_drive_command.toggle_field_relative))
 
+        (self.controller.rightBumper() & ~self.controller.povLeft()).whileTrue(StartEndCommand(
+            self.feeder.enable_intake,
+            self.feeder.disable_intake
+        ))
+
+        (self.controller.rightBumper() & self.controller.povLeft()).whileTrue(StartEndCommand(
+            self.feeder.reverse_intake,
+            self.feeder.disable_intake
+        ))
+
+
+
         # (self.controller.rightTrigger() & (holding_items | testing)).whileTrue(StartEndCommand(self.feeder.enable_intake, self.feeder.disable_intake))
         (self.controller.rightTrigger() & ((holding_items & kicker_enabled) | testing)).whileTrue(SequentialCommandGroup(
-            ElevateShooter(self.shooter, 12, wait=False),
+            ElevateShooter(self.shooter, 17, wait=False),
             WaitCommand(0.25),
             InstantCommand(self.feeder.enable_intake)
         )).onFalse(SequentialCommandGroup(
@@ -122,6 +134,8 @@ class Robot(TimedRobot):
         sd.putNumber("Intake Position (angle)", self.intake.angle())
         sd.putBoolean("Kicker", self.feeder.kicker_enabled())
         sd.putNumber("Kicker target", self.feeder.kicker_target)
+        sd.putBoolean("Items in Hopper", self.hopper.contains_items())
+        sd.putNumber("Gyro angle", self.drive.get_angle())
 
 
     def autonomousInit(self):

@@ -33,7 +33,7 @@ class IntakeSubsystem(Subsystem):
         super().__init__()
         self._pickup_callbacks = []
         self.angle_sensor = DutyCycleEncoder(0)
-        self.lowered_target = 0.057
+        self.lowered_target = 0.045
         self.raised_target = 0.40
         self.tilt_tolerance = 0.01
 
@@ -49,7 +49,7 @@ class IntakeSubsystem(Subsystem):
         self.tilt_motor = WPI_TalonSRX(14)
         self.tilt_motor.setInverted(True)
 
-        self.basic_intake_speed = 1
+        self.basic_intake_speed = 0.8
         self.basic_tilt_speed = 0.6
 
 
