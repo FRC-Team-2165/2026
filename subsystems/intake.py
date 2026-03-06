@@ -6,7 +6,7 @@ from components.bar import BarSensor
 
 from phoenix5 import WPI_TalonSRX
 
-from wpilib import DutyCycleEncoder
+from wpilib import DutyCycleEncoder, Timer
 
 # class IntakePosition(Enum):
 #     Extend = 0,
@@ -52,20 +52,27 @@ class IntakeSubsystem(Subsystem):
         self.basic_intake_speed = 0.8
         self.basic_tilt_speed = 0.6
 
+        self.stall_delta = 0.01
+        self.stall_start = 0
+        self.stall_timer = Timer()
+        self.stall_wait = 0.5 #sec
+        self.stalled = False
+
 
         # self.ball_sensor = BarSensor([5,6,7,8])
 
-
     def extend(self) -> None:
+        self.reset_stall()
         if self._state != IntakePositionState.Extended:
             self._state = IntakePositionState.Extending
 
     def retract(self) -> None:
+        self.reset_stall()
         if self._state != IntakePositionState.Retracted:
             self._state = IntakePositionState.Retracting
 
     def toggle(self) -> None:
-        print("toggling")
+        self.reset_stall()
         if self._state == IntakePositionState.Retracted or self._state == IntakePositionState.Retracting:
             self._state = IntakePositionState.Extending
         if self._state == IntakePositionState.Extended or self._state == IntakePositionState.Extending:
@@ -79,6 +86,13 @@ class IntakeSubsystem(Subsystem):
 
     def is_retracted(self) -> bool:
         return self._state == IntakePositionState.Retracted
+
+    def has_stalled(self) -> bool:
+        return self.stalled
+
+    def reset_stall(self):
+        self.stalled = False
+        self.stall_timer.stop()
 
     def position(self) -> IntakePositionState:
         return self._state
@@ -115,19 +129,36 @@ class IntakeSubsystem(Subsystem):
             for cb in self._pickup_callbacks:
                 cb(item_count)
 
+        angle = self.angle_sensor.get()
+        if self.in_transit():
+            if abs(self.stall_start - angle) > self.stall_delta:
+                self.stall_timer.restart()
+                self.stall_start = angle
+            elif self.stall_timer.hasElapsed(self.stall_wait):
+                self.stall_timer.stop()
+                self.tilt_motor.set(0)
+                self.stalled = True
+                if self._state == IntakePositionState.Retracting:
+                    self._state = IntakePositionState.Retracted
+                else: # Extending is the only other option in context
+                    self._state = IntakePositionState.Extended
+                return
 
         if self._state == IntakePositionState.Extending:
-            if abs(self.angle_sensor.get() - self.lowered_target) < self.tilt_tolerance:
+            if abs(angle - self.lowered_target) < self.tilt_tolerance:
+                self.stall_timer.stop()
                 self._state = IntakePositionState.Extended
                 self.tilt_motor.set(0)
             else:
                 self.tilt_motor.set(self.basic_tilt_speed)
         elif self._state == IntakePositionState.Retracting:
-            if abs(self.angle_sensor.get() - self.raised_target) < self.tilt_tolerance:
+            if abs(angle - self.raised_target) < self.tilt_tolerance:
+                self.stall_timer.stop()
                 self._state = IntakePositionState.Retracted
                 self.tilt_motor.set(0)
             else:
-                self.tilt_motor.set(-(self.basic_tilt_speed + (self.raised_target - self.angle_sensor.get())))
+                # The additional bit is a fudge factor to fight the gravity that isn't relevant on the way down.
+                self.tilt_motor.set(-(self.basic_tilt_speed + (self.raised_target - angle)))
         else:
             # probably not necessary, but it can't hurt
             self.tilt_motor.set(0)
