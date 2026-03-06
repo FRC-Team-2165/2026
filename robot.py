@@ -1,4 +1,5 @@
 import commands2.cmd
+import sys
 import wpilib
 from wpilib import TimedRobot
 from commands2 import CommandScheduler, Command
@@ -25,6 +26,7 @@ from wpimath.geometry import Pose3d
 from subsystems import *
 from subsystems.shooter import TargetingStatus
 from commands import *
+from commands.shift_intake import IntakePosition
 from commands.run_intake import IntakeActivity
 
 import robotpy_apriltag as at
@@ -83,15 +85,19 @@ class Robot(TimedRobot):
         ))
 
 
-
-        # (self.controller.rightTrigger() & (holding_items | testing)).whileTrue(StartEndCommand(self.feeder.enable_intake, self.feeder.disable_intake))
-        (self.controller.rightTrigger() & ((holding_items & kicker_enabled) | testing)).whileTrue(SequentialCommandGroup(
-            ElevateShooter(self.shooter, 17, wait=False),
+        # (self.controller.rightTrigger() & (holding_items | testing)).whileTrue(SequentialCommandGroup(
+        (self.controller.rightTrigger()).whileTrue(SequentialCommandGroup(
+                ElevateShooter(self.shooter, 17, wait=False),
+            InstantCommand(self.feeder.enable_kicker),
+            InstantCommand(self.shooter.enable_launcher),
             WaitCommand(0.25),
             InstantCommand(self.feeder.enable_intake)
         )).onFalse(SequentialCommandGroup(
+            WaitCommand(0.5),
             ElevateShooter(self.shooter, 5, wait=False),
-            InstantCommand(self.feeder.disable_intake)
+            InstantCommand(self.feeder.disable_intake),
+            InstantCommand(self.shooter.disable_launcher),
+            InstantCommand(self.feeder.disable_kicker),
         ))
 
         # This is likely a temporary solution.
@@ -101,28 +107,42 @@ class Robot(TimedRobot):
             if requested_angle == self.shooter.angle_range.max:
                 requested_angle = requested_angle - 0.01
             self.shooter.request_angle(requested_angle)
-            # self.shooter.request_angle(self.shooter.target_angle + applyDeadband(self.controller.getRightX(), 0.2) * 1)
-            # self.shooter.target_angle += applyDeadband(self.controller.getRightX(), 0.1) * 1
             self.shooter.elevation += applyDeadband(self.controller.getRightY(), 0.2) * -0.25
 
         (self.controller.leftBumper()).whileTrue(SequentialCommandGroup(
             InstantCommand(controller_drive_command.disable),
             RunCommand(update_shooter)
         )).onFalse(InstantCommand(controller_drive_command.enable))
-
+        (self.controller.leftBumper() & self.controller.rightStick()).onTrue(InstantCommand(lambda: self.shooter.request_angle(0)))
 
         def on_start():
-            if testing():
-                self.feeder.disable_kicker()
-                self.shooter.disable_launcher()
-            else:
-                self.feeder.enable_kicker()
-                self.shooter.enable_launcher()
+            # if testing():
+            self.feeder.disable_kicker()
+            self.shooter.disable_launcher()
+            # else:
+            #     pass
+                # self.feeder.enable_kicker()
+                # self.shooter.enable_launcher()
 
         enabled.onTrue(InstantCommand(on_start))
 
         self.auto_error = False
-        self.auto_command = None
+        self.auto_command = SequentialCommandGroup(
+            # startup
+            ShiftIntake(self.intake, IntakePosition.Extend, wait=False),
+            ElevateShooter(self.shooter, 17, wait=False),
+            InstantCommand(self.feeder.enable_kicker),
+            InstantCommand(self.shooter.enable_launcher),
+            WaitCommand(0.5),
+            InstantCommand(self.feeder.enable_intake),
+            # doing work automatically
+            WaitCommand(10),
+            # shutdown
+            ElevateShooter(self.shooter, 5, wait=False),
+            InstantCommand(self.feeder.disable_intake),
+            InstantCommand(self.feeder.disable_kicker),
+            InstantCommand(self.shooter.disable_launcher))
+
         phoenix6.SignalLogger.stop()
 
     def robotPeriodic(self):
@@ -145,8 +165,12 @@ class Robot(TimedRobot):
         except ValueError:
             self.auto_error = True
             print("Auto Command doesn't exist! You probably deleted it from robotInit")
+        except Exception as e:
+            print("Something went wrong during Autonomous!", file=sys.stderr)
+            print(e, file=sys.stderr)
+            self.auto_error = True
 
-    def autonomousPeriodic(self):
+    def teleopInit(self):
         if self.auto_error:
             return
         try:
@@ -156,7 +180,7 @@ class Robot(TimedRobot):
             self.auto_error = True
             print("Auto Command doesn't exist! You probably deleted it from robotInit")
 
-    def teleopInit(self):
+    def autonomousPeriodic(self):
         pass
 
     def teleopPeriodic(self):
