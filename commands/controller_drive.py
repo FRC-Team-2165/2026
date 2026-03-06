@@ -31,6 +31,7 @@ class ControllerDrive(Command):
 
     def execute(self):
         if not self.enabled:
+            self.subsystem.drive(0, 0, 0)
             return
         x = -self.controller.getLeftY()
         y = self.controller.getLeftX()
