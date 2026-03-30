@@ -1,9 +1,11 @@
+import time
+
 from commands2 import Command
 from commands2.button import CommandXboxController
 from subsystems import DriveSubsystem
 from wpimath import applyDeadband
 
-from wpilib import DriverStation
+from wpilib import DriverStation, Tracer
 
 
 class ControllerDrive(Command):
@@ -46,7 +48,8 @@ class ControllerDrive(Command):
         y = applyDeadband(y, 0.1)
         rot = applyDeadband(rot, 0.2)
 
-        self.subsystem.drive(x, y, rot, field_relative=False, square_inputs=True)
+        # self.subsystem.drive(0, 0, 0)
+        self.subsystem.drive(x, y, rot, field_relative=self._field_relative, square_inputs=True)
 
     def end(self, interrupted: bool):
         pass

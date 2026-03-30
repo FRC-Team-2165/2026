@@ -1,4 +1,8 @@
 import math
+import threading
+import time
+
+import wpilib
 from wpimath.geometry import Translation2d
 
 from wpilib import MotorSafety
@@ -125,7 +129,18 @@ class SwerveModule(MotorSafety):
 
         self.turn_motor = FalconMotor(config.turn_motor_id)
         self.turn_encoder = CANCoder(config.turn_encoder_id)
+        # self.turn_encoder_absolute_position = self.turn_encoder.get_absolute_position()
+        # self.turn_encoder_position = self.turn_encoder.get_position()
+        # self.last_angle = self.turn_encoder.get_absolute_position().value_as_double
+        self.last_angle = 0
 
+        # def update_values():
+        #     while True:
+        #         self.turn_encoder_absolute_position.refresh()
+        #         self.turn_encoder_position.refresh()
+        #         time.sleep(0.005)
+        # self.update_values = threading.Thread(target=update_values)
+        # self.update_values.start()
 
         self.relative_position = config.relative_position
         self.turn_request = controls.PositionDutyCycle(0).with_slot(0)
@@ -152,13 +167,19 @@ class SwerveModule(MotorSafety):
         """
         self.drive_motor.setInverted(inverted) 
 
-    def set_state(self, state: Polar) -> None:
+    # def set_state(self, state: Polar, profiler: wpilib.Tracer, index: int) -> None:
+    def set_state(self, state: Polar):
         """
         Sets the state of the module, with speed being from [-1, 1]. Runs optimization to minimize heading change.
         """
+        # profiler.addEpoch(f"Module {index}")
         state = self._optimize(state)
+        # profiler.addEpoch(f"  Module {index} optimize")
         self.angle = state.theta
+        # self.set_angle_profiled(state.theta, profiler, index)
+        # profiler.addEpoch(f"  Module {index} angle")
         self.speed = state.magnitude
+        # profiler.addEpoch(f"  Module {index} speed")
 
     def set_state_mps(self, state: Polar) -> None:
         """
@@ -178,7 +199,7 @@ class SwerveModule(MotorSafety):
         """
         Returns a representation of the current state of the module with the speed in m/s.
         """
-        return Polar(self.speed_mps, self.angle)
+        return Polar(self.speed_mps, self._angle())
 
     @property
     def angle(self) -> float:
@@ -188,17 +209,25 @@ class SwerveModule(MotorSafety):
     @angle.setter
     def angle(self, angle: float) -> None:
         """Sets the current angle in degrees. Values outside the range [0, 360) will be normalized."""
-        sd.putNumber("Module angle", angle)
         angle = self._optimize_angle(angle)
-        sd.putNumber("Module angle (opt)", angle)
-        # cancoder_value = 4096 / 360.0 * angle
-        # self.turn_motor.set_position(cancoder_value)
+        self.last_angle = angle
         self.turn_motor.set_control(self.turn_request.with_position(angle / 360))
+        self.turn_motor.feed()
         self.feed()
-        # self.turn_motor.set(ctre.ControlMode.Position, cancoder_value)
+
+    # def set_angle_profiled(self, angle: float, profiler: wpilib.Tracer, index: int):
+    #     angle = self._optimize_angle(angle)
+    #     self.last_angle = angle
+    #     profiler.addEpoch(f"    Module {index} optimize angle")
+    #     self.turn_motor.set_control(self.turn_request.with_position(angle / 360))
+    #     profiler.addEpoch(f"    Module {index} set control")
+    #     self.turn_motor.feed()
+    #     self.feed()
+    #     profiler.addEpoch(f"    Module {index} angle feed")
 
     def _angle(self) -> float:
-        return self.turn_encoder.get_position().value_as_double * 360
+        return self.last_angle
+        # return self.turn_encoder.get_position().value_as_double * 360
 
     @property
     def speed(self) -> float:
@@ -246,7 +275,6 @@ class SwerveModule(MotorSafety):
 
 
     def _optimize_angle(self, angle: float) -> float:
-        sd.putNumber("Module angle (actual)", self._angle())
         offset = self._angle() // 360
         angle = angle % 360 + offset * 360 # set angle in the same degree as the current rotation
         target_angles = (angle + n * 180 for n in range(-2, 3)) # test every reasonable offset from current position

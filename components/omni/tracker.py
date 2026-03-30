@@ -1,3 +1,4 @@
+import wpilib
 from wpimath.geometry import Pose3d, Rotation3d, Transform3d
 from typing import Callable, Iterable, Any, Optional
 import time
@@ -75,6 +76,8 @@ class Tracker:
         return self.historical_data[index].pose, fresh
 
     def update(self):
+        # logger = wpilib.Tracer()
+        # logger.addEpoch("start")
         data: dict[Index, list[Pose3d]] = {}
         for source in self.pose_sources:
             fiducials, offset = source()
@@ -83,16 +86,36 @@ class Tracker:
                     data[index].append(pose + offset)
                 else:
                     data[index] = [pose + offset]
+        # logger.addEpoch("load data from sources")
 
         for (index, locs) in data.items():
             avg = average_pose(locs)
             self.historical_data[index] = AgedPose(time.perf_counter(), avg)
+        # logger.addEpoch("update historical data")
+        # logger.printEpochs()
+
+
+    def incremental_update(self):
+        """Incremental version of `update()`, intended to distribute the load across multiple calls. Makes for more imprecise
+        measurements, but helps amortize the cost of getting target data"""
+        if not hasattr(self, "last_index"):
+            self.last_index = -1
+
+        idx = (self.last_index + 1) % 4
+        self.last_index = idx
+        source = self.pose_sources[idx]
+        fiducials, offset = source()
+        for (index, pose) in fiducials:
+            self.historical_data[index] = AgedPose(time.perf_counter(), pose + offset)
 
     def suggest_position(self, position: Pose3d):
         self.suggested_position = AgedPose(time.perf_counter(), position)
 
     def __getitem__(self, item: Index) -> Optional[Pose3d]:
-        item, fresh = self.get_by_index(item)
+        item = self.get_by_index(item)
+        if item is None:
+            return None
+        item, fresh = item
         return item if fresh else None
 
     def get_position(self) -> Optional[Pose3d]:

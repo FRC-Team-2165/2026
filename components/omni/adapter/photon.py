@@ -3,16 +3,23 @@ import photonlibpy.photonCamera as pv
 from ..tracker import LocationData
 from typing import Iterable
 
+import time
+
 class PhotonAdapter:
     cam: pv.PhotonCamera
     offset: Transform3d
 
     def __init__(self, name: str, position: Pose3d):
         self.cam = pv.PhotonCamera(name)
-        self.offset = position - Pose3d() # maybe reverse? It's 2AM, I don't know
+        self.offset = Pose3d() - position
 
     def __call__(self) -> tuple[Iterable[LocationData], Transform3d]:
-        res = self.cam.getLatestResult()
+        start = time.perf_counter()
+        res = self.cam.getAllUnreadResults()
+        end = time.perf_counter()
+        if len(res) == 0:
+            return [], self.offset
+        res = res[-1]
         if not res.hasTargets():
             return [], self.offset
 

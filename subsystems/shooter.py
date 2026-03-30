@@ -1,6 +1,6 @@
 import wpilib
 from commands2 import Subsystem
-from enum import Flag
+from enum import Flag, auto
 from dataclasses import dataclass
 from wpimath.geometry import Pose3d, Translation3d, Rotation3d
 import math
@@ -16,10 +16,10 @@ from phoenix5 import WPI_TalonSRX
 from wpilib import SmartDashboard as sd
 
 class TargetingStatus(Flag):
-    Set = 0,
-    Adjusting = 1,
-    TooLow = 2,
-    TooHigh = 3,
+    Set = auto()
+    Adjusting = auto()
+    TooLow = auto()
+    TooHigh = auto()
 
     def is_ok(self) -> bool:
         return TargetingStatus.TooHigh not in self and TargetingStatus.TooLow not in self
@@ -75,7 +75,7 @@ class ShooterSubsystem(Subsystem):
     def __init__(self):
         super().__init__()
 
-        self.angle_sensor = AnalogEncoder(0, 450, 281.6)
+        self.angle_sensor = AnalogEncoder(0, 450, 300)
         self.angle_motor = WPI_TalonSRX(19)
         self.angle_motor.setInverted(True)
 
@@ -89,15 +89,14 @@ class ShooterSubsystem(Subsystem):
         self.requested_angle = 0.0
         self.angle_tolerance = 1
 
-        #TODO Figure out coefficients
         self.large_kp = 0.015
         self.large_ki = 0.002
         self.large_kd = 0.00000
         self.angle_controller = PIDController(self.large_kp, self.large_ki, self.large_kd)
         self.angle_controller.setTolerance(1) # 1 degree
 
-        # TODO put 3d coordinates relative to center of robot
-        self.shooter_mouth = Translation3d()
+        # 3d coordinates relative to center of robot
+        self.shooter_mouth = Translation3d(0.193675, 0, 0.4826)
 
         self.enabled = False
 
@@ -122,16 +121,25 @@ class ShooterSubsystem(Subsystem):
 
         target_shooter_speed = 35 #ft/s
         self.shooter_speed = target_shooter_speed / NEO_MAX_SPEED
-        self.shooter_speed = 1
+        # self.shooter_speed = 1
+        self.shooter_speed = 0.9
 
     def enable_launcher(self) -> None:
         self.enabled = True
+        for shooter in self.shooters:
+            shooter.set(self.shooter_speed)
 
     def disable_launcher(self) -> None:
         self.enabled = False
+        for shooter in self.shooters:
+            shooter.set(0)
 
     def toggle_launcher(self) -> None:
         self.enabled = not self.enabled
+        if self.enabled:
+            self.enable_launcher()
+        else:
+            self.disable_launcher()
 
     def launcher_enabled(self) -> bool:
         return self.enabled
@@ -162,6 +170,9 @@ class ShooterSubsystem(Subsystem):
 
         return res
 
+    def request_minimum_elevation(self):
+        self.request_elevation(self.elevation_range.min)
+
     def request_elevation(self, target: float) -> float:
         """requests the elevation change to the specific value. Returns the actual target elevation, which may be
         different from the requested value."""
@@ -171,7 +182,9 @@ class ShooterSubsystem(Subsystem):
 
     def request_angle(self, target: float) -> float:
         """requests the angle change to the specific value. Returns the actual target angle, which may be
-        different from the requested value."""
+        different from the requested value. Assuming there is at least a full rotation of range, this can accept
+        any value, and it will go to the equivalent value within the range, whatever the actual range may be (e.g.
+        270 degrees in a range of (-255, 105) would go to -90"""
         coerced_target = self.angle_range.coerce(target) # (-255, 105]
         self.requested_angle = coerced_target
         self._target_angle = self.angle_range.clamp(coerced_target)
@@ -218,33 +231,27 @@ class ShooterSubsystem(Subsystem):
         return Pose3d(self.shooter_mouth, Rotation3d.fromDegrees(0, 0, self.angle))
 
     def periodic(self) -> None:
-        # enable or disable shooters
-        for shooter in self.shooters:
-            # These have internal controllers, so this should be sufficient
-            shooter.set(self.shooter_speed if self.enabled else 0)
+        # The shooter speed controls were here, but due to what seems to be CAN Bus delays, this is really inefficient
+        # to do every iteration
 
         self.angle_controller.setSetpoint(self._target_angle)
         speed = 0
         error = self.angle - self._target_angle
         if wpilib.DriverStation.isEnabled() and abs(error) > self.angle_tolerance:
             speed = self.angle_controller.calculate(self.angle)
+            # Add a bit of a feed-forward if we're close to the target
             if abs(error) < 10:
                 if speed < 0:
                     speed -= 0.08
                 else:
                     speed += 0.08
-                # speed += 0.1 * (speed / speed)
 
         self.angle_motor.set(speed)
-        sd.putNumber("turret output", speed)
-        sd.putNumber("turret target", self._target_angle)
-        sd.putNumber("turret error", self.angle - self._target_angle)
         sd.putNumber("turret angle", self.angle)
-        sd.putNumber("turret elevation", self.elevation)
 
-
+        # Equation to translate target angle to servo angle
         servo_target_angle = (pyerf.erfinv(self._target_elevation/11.08 - 1) + 0.54) / 0.0159
-        # This convolution translates the target angle into servo-useful coordinates.
+        # This convoluted mess translates the target angle into a servo-useful value.
         # The servo is 110 degrees, and has a useful input range of 0.19 to 0.84, decreasing as it raises
         servo_target = 1 - (servo_target_angle / 110)
         servo_target = servo_target * 0.65 + 0.19

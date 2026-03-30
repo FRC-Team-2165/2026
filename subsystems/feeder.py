@@ -21,8 +21,10 @@ class FeederSubsystem(Subsystem):
 
         self.target_kicker_speed = 35 # ft/s
         self.kicker_target = self.target_kicker_speed / MINI_CIM_MAX_SPEED
+        self.kicker_target = 0.8
 
-        self.intake_speed = 0.5
+        self.intake_speed = 0.8
+        self.agitator_speed = 0.7
 
         self.passthrough_callbacks = []
 
@@ -33,6 +35,8 @@ class FeederSubsystem(Subsystem):
         # self.kickers = [kicker_front, kicker_back]
 
         self.intake_motor = WPI_TalonSRX(18)
+        self.hopper_agitator = WPI_TalonSRX(15)
+        self.hopper_agitator.setInverted(True)
 
         # self.detector = DigitalInput(1)
 
@@ -40,12 +44,15 @@ class FeederSubsystem(Subsystem):
 
     def enable_intake(self) -> None:
         self.intake_motor.set(self.intake_speed)
+        self.hopper_agitator.set(self.agitator_speed)
 
     def disable_intake(self) -> None:
         self.intake_motor.set(0)
+        self.hopper_agitator.set(0)
 
     def reverse_intake(self) -> None:
         self.intake_motor.set(-self.intake_speed)
+        self.hopper_agitator.set(-self.agitator_speed)
 
     def intake_enabled(self) -> bool:
         return self.intake_motor.get() != 0

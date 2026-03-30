@@ -5,6 +5,7 @@ from wpimath import applyDeadband
 from wpimath.geometry import Translation2d
 
 from wpilib.drive import RobotDriveBase
+from wpilib import Tracer
 
 
 def clamp(value, min, max):
@@ -67,7 +68,8 @@ class SwerveDrive(RobotDriveBase):
 
         Inputs are trimmed by the supplied deadband parameters after squaring, if used.
         """
-
+        self.profiler = Tracer()
+        self.profiler.addEpoch("start")
         x_speed = clamp(x_speed, -1, 1)
         y_speed = clamp(y_speed, -1, 1)
         rot = clamp(rot, -1, 1)
@@ -80,13 +82,15 @@ class SwerveDrive(RobotDriveBase):
         x_speed = applyDeadband(x_speed, self.deadband["x"])
         y_speed = applyDeadband(y_speed, self.deadband["y"])
         rot = applyDeadband(rot, self.deadband["z"])
-
+        self.profiler.addEpoch("Input management")
 
         # Convert cartesian vector input to polar vector. Makes all of the math *much* simpler.
         target_vector = Cartesian(x_speed, -y_speed).to_polar()
         target_vector.theta -= current_angle
 
         max_module_distance = max(m.offset_from_center() for m in self.modules)
+
+        self.profiler.addEpoch("Vector prep")
 
         module_states: list[Polar] = []
         # Combine target vector with rotation state for each module.
@@ -100,12 +104,15 @@ class SwerveDrive(RobotDriveBase):
 
             module_states.append(target_vector + rotation)
 
+        self.profiler.addEpoch("Module calculation")
+
         # Desaturate (normalize) module speeds. Very necessary.
         top_speed = max(m.magnitude for m in module_states)
         if top_speed > 1:
             for state in module_states:
                 state.magnitude /= top_speed
 
+        self.profiler.addEpoch("Normalization")
 
         for i, s in enumerate(module_states):
             if s.magnitude == 0:
@@ -113,12 +120,23 @@ class SwerveDrive(RobotDriveBase):
                 self.modules[i].speed = 0
             else:
                 self.modules[i].set_state(s)
+            self.profiler.addEpoch(f"Set module {i}")
         self.feed()
+        self.profiler.addEpoch("feeding time")
 
-        net_vector = sum((m.get_state_mps() for m in self.modules), start=Polar.zero())
-        net_vector.theta += current_angle
-        net_vector.magnitude *= 0.02 / len(self.modules) # 0.02 from robot running at 50Hz.
-        self._position += net_vector
+        # FIXME the call to get_state_mps is hugely expensive for some reason
+        #   Most likely due to the interaction with the CAN Bus. The CTRE stuff is the main culprit,
+        #   but REV hardware may be having problems too
+        if x_speed != 0 or y_speed != 0:
+            net_vector = sum((m.get_state_mps() for m in self.modules), start=Polar.zero())
+            net_vector.theta += current_angle
+            # Averaging magnitude (m/s) over modules and scaling by time step (20ms)
+            # We're assuming there's not meaningful acceleration across the time step (which is fair at this scale)
+            net_vector.magnitude *= 0.02 / len(self.modules)
+            self._position += net_vector
+        # self.profiler.addEpoch("Odometry")
+        # if x_speed != 0 or y_speed != 0 or rot != 0:
+        #     self.profiler.printEpochs()
 
     def initialize(self) -> None:
         """
@@ -150,10 +168,9 @@ class SwerveDrive(RobotDriveBase):
         self.feed()
 
     def location(self) -> Translation2d:
-        # May not account for rotation, but also may be a non-issue
-
+        # Does account for rotation
         trans = self._position.to_translation2d()
-        return Translation2d(-trans.X(), trans.Y())
+        return Translation2d(-trans.X(), -trans.Y())
 
     def reset_position(self) -> None:
         """
