@@ -1,6 +1,7 @@
 from commands2 import Command
 from subsystems import DriveSubsystem, ShooterSubsystem
 from typing import Optional
+from wpilib import SmartDashboard as sd
 
 class HoldAngle(Command):
     drive: DriveSubsystem
@@ -21,6 +22,8 @@ class HoldAngle(Command):
 
     def initialize(self):
         self.finished = False
+        sd.putBoolean("Fixed Angle Enabled", True)
+        sd.putNumber("Fixed Angle Target", self.target_angle)
 
     def execute(self):
         # Neither turret nor swerve system nor gyro use NWU (instead using **D), so they are compatible without adjustment
@@ -32,6 +35,7 @@ class HoldAngle(Command):
 
     def end(self, interrupted: bool):
         self.shooter.request_minimum_elevation()
+        sd.putBoolean("Fixed Angle Enabled", False)
 
     def isFinished(self) -> bool:
         return self.finished

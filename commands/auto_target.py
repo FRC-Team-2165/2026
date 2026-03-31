@@ -38,6 +38,7 @@ class AutoTarget(Command):
 
     def initialize(self):
         print("Enabling AutoTargeting")
+        sd.putBoolean("Auto Targeting Enabled", True)
         self.finished = False
         if wpilib.DriverStation.getAlliance() == wpilib.DriverStation.Alliance.kBlue:
             self.target = 26
@@ -101,6 +102,7 @@ class AutoTarget(Command):
         # self.feeder.disable_kicker()
         # self.feeder.disable_intake()
         self.shooter.request_minimum_elevation()
+        sd.putBoolean("Auto Targeting Enabled", False)
 
     def isFinished(self) -> bool:
         return self.finished
