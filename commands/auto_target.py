@@ -53,6 +53,7 @@ class AutoTarget(Command):
     def execute(self):
         tag = self.tracker[self.target]
         if tag is None:
+            self.shooter.request_minimum_elevation()
             return
 
         offset = Transform3d(self.offset, tag.rotation().rotateBy(Rotation3d(0, 0, math.pi)))
@@ -60,6 +61,7 @@ class AutoTarget(Command):
         angles = get_targeting_angles(target)
         if angles is None:
             sd.putBoolean("In range", False)
+            self.shooter.request_minimum_elevation()
             return
 
         angle, (tilt1, tilt2) = angles
